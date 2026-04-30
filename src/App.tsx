@@ -20,7 +20,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { History, ShieldCheck, MessageCircle, MoreVertical, Star, Gift, Menu, Headset, Volume2, VolumeX } from 'lucide-react';
 import { auth, logout, db } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, addDoc, collection, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, addDoc, collection, updateDoc, arrayUnion, onSnapshot, increment } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from './lib/firestoreUtils';
 
 export default function App() {
@@ -132,6 +132,14 @@ export default function App() {
   ]);
   const [bet1, setBet1] = useState({ isActive: false, isQueued: false, amount: 0, currentId: null as string | null });
   const [bet2, setBet2] = useState({ isActive: false, isQueued: false, amount: 0, currentId: null as string | null });
+  const [auto1, setAuto1] = useState({ bet: false, cashout: false, val: 2.0 });
+  const [auto2, setAuto2] = useState({ bet: false, cashout: false, val: 2.0 });
+  const auto1Ref = useRef(auto1);
+  const auto2Ref = useRef(auto2);
+  useEffect(() => { auto1Ref.current = auto1; }, [auto1]);
+  useEffect(() => { auto2Ref.current = auto2; }, [auto2]);
+  const lastAmount1 = useRef(100);
+  const lastAmount2 = useRef(100);
 
   const bet1IdRef = useRef<string | null>(null);
   const bet2IdRef = useRef<string | null>(null);
@@ -268,7 +276,7 @@ export default function App() {
 
   const [betAmount, setBetAmount] = useState(10);
 
-  const handleBet = async (slot: 1 | 2, amount: number) => {
+  const handleBet = useCallback(async (slot: 1 | 2, amount: number) => {
     if (!user || balanceRef.current < amount || amount < 10) return;
     if (isBanned) {
       alert("Your account has been suspended. Please contact support.");
@@ -296,6 +304,7 @@ export default function App() {
     }
 
     if (slot === 1) {
+      lastAmount1.current = amount;
       if (status === 'WAITING') {
         setBet1(prev => ({ ...prev, isActive: true, amount, currentId: betId }));
       } else {
@@ -303,6 +312,7 @@ export default function App() {
         queuedBet1IdRef.current = betId;
       }
     } else {
+      lastAmount2.current = amount;
       if (status === 'WAITING') {
         setBet2(prev => ({ ...prev, isActive: true, amount, currentId: betId }));
       } else {
@@ -314,11 +324,11 @@ export default function App() {
     const userPath = `users/${user.uid}`;
     try {
       const userRef = doc(db, userPath);
-      await updateDoc(userRef, { balance: newBalance });
+      await updateDoc(userRef, { balance: increment(-amount) });
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, userPath);
     }
-  };
+  }, [user, isBanned, status]);
 
   const [lastWin, setLastWin] = useState<{ amount: number, multiplier: number } | null>(null);
 
@@ -327,16 +337,22 @@ export default function App() {
   useEffect(() => { bet1Ref.current = bet1; }, [bet1]);
   useEffect(() => { bet2Ref.current = bet2; }, [bet2]);
 
-  const handleCashOut = useCallback(async (slot: 1 | 2) => {
+  const pendingBalanceRef = useRef(0);
+
+  const handleCashOut = useCallback(async (slot: 1 | 2, forcedMultiplier?: number) => {
     if (!user) return;
     
     // Captured ref-based bet state for zero-latency
     const targetBet = slot === 1 ? bet1Ref.current : bet2Ref.current;
 
     if (targetBet.isQueued) {
-      const newBalance = balanceRef.current + targetBet.amount;
+      const amountToReturn = targetBet.amount;
+      const newBalance = balanceRef.current + amountToReturn;
+      
+      // Update local state immediately
       setBalance(newBalance);
       balanceRef.current = newBalance;
+      
       if (slot === 1) {
         setBet1(prev => ({ ...prev, isQueued: false, amount: 0 }));
         queuedBet1IdRef.current = null;
@@ -348,15 +364,20 @@ export default function App() {
       const userPath = `users/${user.uid}`;
       try {
         const userRef = doc(db, userPath);
-        await updateDoc(userRef, { balance: newBalance });
+        await updateDoc(userRef, { balance: increment(amountToReturn) });
       } catch (err) { console.error(err); }
       return;
     }
 
     // Capture multiplier from Ref at the exact microsecond of click
-    const clickMultiplier = multiplierRef.current;
+    // or use the forced one for auto-cashout
+    const clickMultiplier = forcedMultiplier || multiplierRef.current;
 
-    if (!targetBet.isActive || status !== 'FLYING' || !targetBet.currentId || clickMultiplier <= 1.0) return;
+    // Reliability: If it is an auto-cashout (forcedMultiplier), we ignore the FLYING status check
+    // to prevent race conditions where the crash happens in the same frame.
+    const canCashOut = targetBet.isActive && targetBet.currentId && (forcedMultiplier || status === 'FLYING') && clickMultiplier >= 1.0;
+
+    if (!canCashOut) return;
     
     const betAmount = targetBet.amount;
     const betId = targetBet.currentId;
@@ -364,9 +385,12 @@ export default function App() {
     const winAmount = Number((clickMultiplier * betAmount).toFixed(2));
     const newBalance = balanceRef.current + winAmount;
     
-    // 1. INSTANT STATE UPDATES
+    // 1. INSTANT STATE UPDATES (Visual Only)
     setBalance(newBalance);
     balanceRef.current = newBalance;
+    // Track this win locally so onSnapshot doesn't revert it while server processes
+    pendingBalanceRef.current += winAmount;
+    
     audioRefs.current.cashout.play().catch(() => {});
     
     if (slot === 1) {
@@ -380,19 +404,33 @@ export default function App() {
     setLastWin({ amount: winAmount, multiplier: clickMultiplier });
     setTimeout(() => setLastWin(null), 3000);
 
-    // 2. BACKGROUND SERVER SYNC
+    // 2. BACKGROUND SERVER SYNC (Atomic Batch)
     try {
-      await updateDoc(doc(db, 'bets', betId), {
+      const { writeBatch } = await import('firebase/firestore');
+      const batch = writeBatch(db);
+      
+      // Update bet
+      const betRef = doc(db, 'bets', betId);
+      batch.update(betRef, {
         status: 'WON',
         multiplier: clickMultiplier,
         winAmount: winAmount,
         cashedOutAt: serverTimestamp()
       });
 
+      // Update user balance
       const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, { balance: increment(winAmount) });
+      batch.update(userRef, { balance: increment(winAmount) });
+
+      await batch.commit();
+      
+      // Once committed, we can reduce the pending credit as onSnapshot will eventually have it
+      setTimeout(() => {
+        pendingBalanceRef.current = Math.max(0, pendingBalanceRef.current - winAmount);
+      }, 2000);
     } catch (err) {
       console.error('Critical Cashout Sync Error:', err);
+      alert('Cashout sync failed. Please check your connection and refresh.');
     }
   }, [user, status]);
 
@@ -430,7 +468,19 @@ export default function App() {
     else newCrashPoint = 20 + Math.random() * 50;
     
     setCrashPoint(newCrashPoint);
-  }, []);
+  }, [handleBet]);
+
+  useEffect(() => {
+    if (status !== 'WAITING') return;
+    
+    // If auto-bet is enabled while waiting, place the bet immediately
+    if (auto1.bet && !bet1.isActive && !bet1.isQueued) {
+      handleBet(1, lastAmount1.current);
+    }
+    if (auto2.bet && !bet2.isActive && !bet2.isQueued) {
+      handleBet(2, lastAmount2.current);
+    }
+  }, [status, auto1.bet, auto2.bet, bet1.isActive, bet1.isQueued, bet2.isActive, bet2.isQueued]);
 
   useEffect(() => {
     if (status !== 'WAITING') return;
@@ -453,6 +503,14 @@ export default function App() {
       const newMultiplier = Math.pow(Math.E, 0.12 * elapsed);
       multiplierRef.current = newMultiplier;
       setMultiplier(newMultiplier);
+
+      // Auto Cashout Logic
+      if (auto1Ref.current.cashout && bet1IdRef.current && newMultiplier >= auto1Ref.current.val) {
+        handleCashOut(1, auto1Ref.current.val);
+      }
+      if (auto2Ref.current.cashout && bet2IdRef.current && newMultiplier >= auto2Ref.current.val) {
+        handleCashOut(2, auto2Ref.current.val);
+      }
 
       if (newMultiplier >= crashPoint) {
         setStatus('CRASHED');
@@ -704,6 +762,10 @@ export default function App() {
                   onBet={handleBet}
                   onCashOut={handleCashOut}
                   multiplier={multiplier}
+                  auto1={auto1}
+                  setAuto1={setAuto1}
+                  auto2={auto2}
+                  setAuto2={setAuto2}
                 />
               </div>
             </motion.div>

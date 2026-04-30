@@ -10,13 +10,19 @@ interface BetSectionProps {
   isQueued: boolean;
   multiplier: number;
   betAmount: number;
+  autoBet: boolean;
+  setAutoBet: (v: boolean) => void;
+  autoCashout: boolean;
+  setAutoCashout: (v: boolean) => void;
+  autoCashoutVal: number;
+  setAutoCashoutVal: (v: number) => void;
 }
 
-const BetSection: React.FC<BetSectionProps> = ({ label, onBet, isFlying, onCashOut, isActive, isQueued, multiplier, betAmount }) => {
+const BetSection: React.FC<BetSectionProps> = ({ 
+  label, onBet, isFlying, onCashOut, isActive, isQueued, multiplier, betAmount,
+  autoBet, setAutoBet, autoCashout, setAutoCashout, autoCashoutVal, setAutoCashoutVal
+}) => {
   const [amount, setAmount] = useState(100);
-  const [autoBet, setAutoBet] = useState(false);
-  const [autoCashout, setAutoCashout] = useState(false);
-  const [autoCashoutVal, setAutoCashoutVal] = useState(2.0);
 
   const isPlaying = isActive || isQueued;
 
@@ -123,9 +129,24 @@ const BetSection: React.FC<BetSectionProps> = ({ label, onBet, isFlying, onCashO
         </label>
 
         <div className="flex items-center gap-2">
-           <span className="text-[10px] font-bold text-white/40 uppercase">Auto Cashout</span>
-           <div className="w-16 bg-black/40 border border-white/5 rounded-lg py-1 px-2 text-center text-xs font-mono font-bold">
-             {autoCashoutVal.toFixed(2)}x
+           <label className="flex items-center gap-2 cursor-pointer group/label">
+             <div className={`w-10 h-5 rounded-full relative transition-colors ${autoCashout ? 'bg-orange-500' : 'bg-white/10'}`} onClick={() => setAutoCashout(!autoCashout)}>
+               <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${autoCashout ? 'left-6' : 'left-1'}`}></div>
+             </div>
+             <span className="text-[10px] font-bold text-white/40 uppercase group-hover/label:text-white/60 transition-colors">Auto Cashout</span>
+           </label>
+           <div className="flex items-center bg-black/40 border border-white/5 rounded-lg">
+             <button 
+               onClick={() => setAutoCashoutVal(Math.max(1.01, autoCashoutVal - 0.1))}
+               className="px-2 py-1 hover:bg-white/5 text-white/30"
+             >-</button>
+             <div className="w-14 py-1 text-center text-xs font-mono font-bold text-aviator-accent">
+               {autoCashoutVal.toFixed(2)}x
+             </div>
+             <button 
+               onClick={() => setAutoCashoutVal(autoCashoutVal + 0.1)}
+               className="px-2 py-1 hover:bg-white/5 text-white/30"
+             >+</button>
            </div>
         </div>
       </div>
@@ -155,7 +176,11 @@ export const BetControls: React.FC<{
   onBet: (slot: 1 | 2, amount: number) => void; 
   onCashOut: (slot: 1 | 2) => void;
   multiplier: number;
-}> = ({ isFlying, bet1, bet2, onBet, onCashOut, multiplier }) => {
+  auto1: { bet: boolean; cashout: boolean; val: number };
+  setAuto1: (v: any) => void;
+  auto2: { bet: boolean; cashout: boolean; val: number };
+  setAuto2: (v: any) => void;
+}> = ({ isFlying, bet1, bet2, onBet, onCashOut, multiplier, auto1, setAuto1, auto2, setAuto2 }) => {
   return (
     <div className="flex flex-col md:flex-row gap-4">
       <BetSection 
@@ -167,6 +192,12 @@ export const BetControls: React.FC<{
         onCashOut={() => onCashOut(1)} 
         multiplier={multiplier} 
         betAmount={bet1.amount} 
+        autoBet={auto1.bet}
+        setAutoBet={(v) => setAuto1({ ...auto1, bet: v })}
+        autoCashout={auto1.cashout}
+        setAutoCashout={(v) => setAuto1({ ...auto1, cashout: v })}
+        autoCashoutVal={auto1.val}
+        setAutoCashoutVal={(v) => setAuto1({ ...auto1, val: v })}
       />
       <BetSection 
         label="BET 2" 
@@ -177,6 +208,12 @@ export const BetControls: React.FC<{
         onCashOut={() => onCashOut(2)} 
         multiplier={multiplier} 
         betAmount={bet2.amount} 
+        autoBet={auto2.bet}
+        setAutoBet={(v) => setAuto2({ ...auto2, bet: v })}
+        autoCashout={auto2.cashout}
+        setAutoCashout={(v) => setAuto2({ ...auto2, cashout: v })}
+        autoCashoutVal={auto2.val}
+        setAutoCashoutVal={(v) => setAuto2({ ...auto2, val: v })}
       />
     </div>
   );

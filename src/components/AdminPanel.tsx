@@ -22,6 +22,7 @@ export const AdminPanel: React.FC = () => {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'users' | 'transactions' | 'settings'>('users');
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [manualFundAmt, setManualFundAmt] = useState<string>('');
 
   const methods = [
     { id: 'bkash', label: 'bKash', icon: 'https://i.ibb.co/37XyZzG/bkash.png' },
@@ -586,16 +587,17 @@ export const AdminPanel: React.FC = () => {
                     <div className="flex gap-2">
                        <input 
                          type="number" 
-                         id="manual-fund-input"
+                         value={manualFundAmt}
+                         onChange={(e) => setManualFundAmt(e.target.value)}
                          placeholder="Enter amount (৳)"
                          className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono text-aviator-accent outline-none focus:border-aviator-accent/50 transition-all placeholder:text-white/10"
                        />
                        <button 
                          onClick={async () => {
-                           const input = document.getElementById('manual-fund-input') as HTMLInputElement;
-                           const amt = parseInt(input.value);
+                           const amt = parseFloat(manualFundAmt);
                            if (!isNaN(amt)) {
                              await handleUpdateBalance(editingUser.id, editingUser.balance || 0, amt);
+                             setManualFundAmt('');
                              setEditingUser(null);
                            }
                          }}
@@ -607,12 +609,12 @@ export const AdminPanel: React.FC = () => {
                     <div className="flex gap-2">
                       <button 
                          onClick={async () => {
-                           const input = document.getElementById('manual-fund-input') as HTMLInputElement;
-                           const amt = parseInt(input.value);
+                           const amt = parseFloat(manualFundAmt);
                            if (!isNaN(amt)) {
                              const current = editingUser.balance || 0;
                              const diff = amt - current;
                              await handleUpdateBalance(editingUser.id, current, diff);
+                             setManualFundAmt('');
                              setEditingUser(null);
                            }
                          }}
@@ -622,10 +624,10 @@ export const AdminPanel: React.FC = () => {
                       </button>
                       <button 
                          onClick={async () => {
-                           const input = document.getElementById('manual-fund-input') as HTMLInputElement;
-                           const amt = parseInt(input.value);
+                           const amt = parseFloat(manualFundAmt);
                            if (!isNaN(amt)) {
                              await handleUpdateBalance(editingUser.id, editingUser.balance || 0, -amt);
+                             setManualFundAmt('');
                              setEditingUser(null);
                            }
                          }}
