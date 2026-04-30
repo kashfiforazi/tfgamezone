@@ -17,7 +17,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { AuthModal } from './components/AuthModals';
 import { GameStatus, WinHistory } from './types';
 import { motion, AnimatePresence } from 'motion/react';
-import { History, ShieldCheck, MessageCircle, MoreVertical, Star, Gift, Menu, Headset } from 'lucide-react';
+import { History, ShieldCheck, MessageCircle, MoreVertical, Star, Gift, Menu, Headset, Volume2, VolumeX } from 'lucide-react';
 import { auth, logout, db } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, addDoc, collection, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
@@ -30,6 +30,10 @@ export default function App() {
   const [authType, setAuthType] = useState<'login' | 'signup'>('login');
   const [isAdmin, setIsAdmin] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
+  const [isSoundEnabled, setIsSoundEnabled] = useState(() => {
+    const saved = localStorage.getItem('soundEnabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
   const [multiplier, setMultiplier] = useState(1.0);
   const multiplierRef = useRef(1.0);
   const [status, setStatus] = useState<GameStatus>('FLYING');
@@ -52,9 +56,16 @@ export default function App() {
     sounds.bgMusic.loop = true;
     sounds.bgMusic.volume = 0.1;
     
+    // Set initial volumes based on state
+    Object.values(sounds).forEach(audio => {
+      (audio as HTMLAudioElement).muted = !isSoundEnabled;
+    });
+
     // Start background music on user interaction
     const startMusic = () => {
-      sounds.bgMusic.play().catch(() => {});
+      if (isSoundEnabled) {
+        sounds.bgMusic.play().catch(() => {});
+      }
       window.removeEventListener('click', startMusic);
     };
     window.addEventListener('click', startMusic);
@@ -85,6 +96,22 @@ export default function App() {
       sounds.crash.play().catch(() => {});
     }
   }, [status]);
+
+  useEffect(() => {
+    localStorage.setItem('soundEnabled', JSON.stringify(isSoundEnabled));
+    const sounds = audioRefs.current;
+    Object.values(sounds).forEach(audio => {
+      (audio as HTMLAudioElement).muted = !isSoundEnabled;
+    });
+    
+    if (isSoundEnabled) {
+      if (status === 'FLYING') sounds.engine.play().catch(() => {});
+      else if (status === 'WAITING') sounds.waiting.play().catch(() => {});
+      sounds.bgMusic.play().catch(() => {});
+    } else {
+      Object.values(sounds).forEach(audio => (audio as HTMLAudioElement).pause());
+    }
+  }, [isSoundEnabled, status]);
 
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -327,9 +354,10 @@ export default function App() {
     const currentBetAmount = targetBet.amount;
     const currentBetId = targetBet.currentId;
 
-    if (currentMultiplier <= 1.0) return; // Prevent early cashout bugs
+    // Remove artificial floor for instant feedback
+    if (currentMultiplier < 1.0) return; 
 
-    const winAmount = Math.floor(currentMultiplier * currentBetAmount);
+    const winAmount = Number((currentMultiplier * currentBetAmount).toFixed(2));
     const newBalance = balanceRef.current + winAmount;
     
     // Immediate UI feedback
@@ -339,8 +367,10 @@ export default function App() {
     
     if (slot === 1) {
       setBet1(prev => ({ ...prev, isActive: false, currentId: null }));
+      bet1IdRef.current = null;
     } else {
       setBet2(prev => ({ ...prev, isActive: false, currentId: null }));
+      bet2IdRef.current = null;
     }
 
     setLastWin({ amount: winAmount, multiplier: currentMultiplier });
@@ -474,6 +504,18 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setIsSoundEnabled(!isSoundEnabled)}
+            className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-all active:scale-90"
+            title={isSoundEnabled ? "Mute Sound" : "Unmute Sound"}
+          >
+            {isSoundEnabled ? (
+              <Volume2 className="w-5 h-5 text-aviator-accent" />
+            ) : (
+              <VolumeX className="w-5 h-5 text-white/20" />
+            )}
+          </button>
+
           <button 
             onClick={() => setActiveTab('wallet')}
             className="hidden sm:flex bg-aviator-accent text-black text-[11px] font-black px-6 py-2.5 rounded-xl hover:brightness-110 transition-all active:scale-95 shadow-lg shadow-aviator-accent/30"
