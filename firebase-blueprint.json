@@ -1,0 +1,107 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and balance",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "balance": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "balance"]
+    },
+    "Game": {
+      "title": "Game State",
+      "description": "Current status of the game",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["WAITING", "FLYING", "CRASHED"] },
+        "multiplier": { "type": "number" },
+        "crashPoint": { "type": "number" },
+        "startTime": { "type": "number" },
+        "history": { 
+          "type": "array",
+          "items": { "$ref": "#/entities/GameResult" }
+        }
+      },
+      "required": ["status", "multiplier"]
+    },
+    "Bet": {
+      "title": "Bet",
+      "description": "A player's bet for a round",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "amount": { "type": "number" },
+        "multiplier": { "type": "number" },
+        "winAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["playing", "cashed-out", "lost"] },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["userId", "amount", "status"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Deposit or withdrawal record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["deposit", "withdraw"] },
+        "method": { "type": "string", "enum": ["bkash", "nagad", "binance"] },
+        "status": { "type": "string", "enum": ["pending", "completed", "rejected"] },
+        "timestamp": { "type": "number" }
+      }
+    },
+    "Settings": {
+      "title": "Site Settings",
+      "description": "Global settings controlled by admin",
+      "type": "object",
+      "properties": {
+        "supportNumber": { "type": "string" },
+        "aiControlMode": { "type": "string", "enum": ["fair", "house-win", "house-loss"] },
+        "minDeposit": { "type": "number" }
+      }
+    },
+    "GameResult": {
+      "title": "Game Result",
+      "description": "Record of a finished game",
+      "type": "object",
+      "properties": {
+        "multiplier": { "type": "number" },
+        "timestamp": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "system/game_state": {
+      "schema": "Game",
+      "description": "Singleton for game status"
+    },
+    "bets/{betId}": {
+      "schema": "Bet",
+      "description": "Bets for the current or recent rounds"
+    },
+    "transactions/{txId}": {
+      "schema": "Transaction",
+      "description": "User deposit/withdrawals"
+    },
+    "redeemCodes/{codeId}": {
+      "schema": "RedeemCode",
+      "description": "Promo codes for balance"
+    },
+    "settings/global": {
+      "schema": "Settings",
+      "description": "Admin global configuration"
+    }
+  }
+}
