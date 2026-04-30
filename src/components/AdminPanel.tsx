@@ -581,8 +581,65 @@ export const AdminPanel: React.FC = () => {
                 </div>
 
                 <div className="space-y-4">
+                  <h4 className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] px-1">Manual Fund Adjustment</h4>
+                  <div className="glass p-6 rounded-[2rem] border border-white/5 space-y-4">
+                    <div className="flex gap-2">
+                       <input 
+                         type="number" 
+                         id="manual-fund-input"
+                         placeholder="Enter amount (৳)"
+                         className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono text-aviator-accent outline-none focus:border-aviator-accent/50 transition-all placeholder:text-white/10"
+                       />
+                       <button 
+                         onClick={async () => {
+                           const input = document.getElementById('manual-fund-input') as HTMLInputElement;
+                           const amt = parseInt(input.value);
+                           if (!isNaN(amt)) {
+                             await handleUpdateBalance(editingUser.id, editingUser.balance || 0, amt);
+                             setEditingUser(null);
+                           }
+                         }}
+                         className="bg-aviator-accent text-black px-6 rounded-xl font-black text-[10px] uppercase tracking-widest hover:brightness-110 active:scale-95 transition-all"
+                       >
+                         Add Funds
+                       </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button 
+                         onClick={async () => {
+                           const input = document.getElementById('manual-fund-input') as HTMLInputElement;
+                           const amt = parseInt(input.value);
+                           if (!isNaN(amt)) {
+                             const current = editingUser.balance || 0;
+                             const diff = amt - current;
+                             await handleUpdateBalance(editingUser.id, current, diff);
+                             setEditingUser(null);
+                           }
+                         }}
+                         className="flex-1 border border-white/10 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-white/5 transition-all"
+                      >
+                        Set Exact Balance
+                      </button>
+                      <button 
+                         onClick={async () => {
+                           const input = document.getElementById('manual-fund-input') as HTMLInputElement;
+                           const amt = parseInt(input.value);
+                           if (!isNaN(amt)) {
+                             await handleUpdateBalance(editingUser.id, editingUser.balance || 0, -amt);
+                             setEditingUser(null);
+                           }
+                         }}
+                         className="flex-1 border border-red-500/10 text-red-500/50 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-red-500/10 hover:text-red-500 transition-all"
+                      >
+                        Deduct Funds
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
                   <h4 className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] px-1">Management Actions</h4>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3">
                     <button 
                       onClick={async () => {
                         await handleToggleBan(editingUser.id, !!editingUser.isBanned);
@@ -594,51 +651,9 @@ export const AdminPanel: React.FC = () => {
                         : 'border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white'
                       }`}
                     >
-                      {editingUser.isBanned ? 'Revoke Ban' : 'Suspend Account'}
-                    </button>
-                    <button 
-                      onClick={async () => {
-                        const amt = prompt('Add/Subtract amount (e.g. 500 or -500):');
-                        if (amt && !isNaN(parseInt(amt))) {
-                          await handleUpdateBalance(editingUser.id, editingUser.balance || 0, parseInt(amt));
-                          setEditingUser(null);
-                        }
-                      }}
-                      className="py-4 bg-white text-black rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-aviator-accent transition-all"
-                    >
-                      Adjust Balance
-                    </button>
-                    <button 
-                      onClick={async () => {
-                        const amt = prompt('Enter exact new total balance (৳):');
-                        if (amt && !isNaN(parseInt(amt))) {
-                          const current = editingUser.balance || 0;
-                          const diff = parseInt(amt) - current;
-                          await handleUpdateBalance(editingUser.id, current, diff);
-                          setEditingUser(null);
-                        }
-                      }}
-                      className="py-4 border border-white/10 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-white/5 transition-all"
-                    >
-                      Set Total 
+                      {editingUser.isBanned ? 'Revoke User Ban' : 'Suspend Account / Permanent Ban'}
                     </button>
                   </div>
-                </div>
-
-                <div className="pt-4 border-t border-white/5 flex gap-4">
-                  <button 
-                    onClick={async () => {
-                      await handleToggleBan(editingUser.id, !!editingUser.isBanned);
-                      setEditingUser(null);
-                    }}
-                    className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${
-                      editingUser.isBanned 
-                      ? 'bg-green-500 text-black shadow-lg shadow-green-500/20' 
-                      : 'border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white'
-                    }`}
-                  >
-                    {editingUser.isBanned ? 'Revoke User Ban' : 'Suspend Account'}
-                  </button>
                 </div>
 
                 <button 

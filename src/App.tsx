@@ -322,10 +322,16 @@ export default function App() {
 
   const [lastWin, setLastWin] = useState<{ amount: number, multiplier: number } | null>(null);
 
+  const bet1Ref = useRef(bet1);
+  const bet2Ref = useRef(bet2);
+  useEffect(() => { bet1Ref.current = bet1; }, [bet1]);
+  useEffect(() => { bet2Ref.current = bet2; }, [bet2]);
+
   const handleCashOut = useCallback(async (slot: 1 | 2) => {
     if (!user) return;
     
-    const targetBet = slot === 1 ? bet1 : bet2;
+    // Captured ref-based bet state for zero-latency
+    const targetBet = slot === 1 ? bet1Ref.current : bet2Ref.current;
 
     if (targetBet.isQueued) {
       const newBalance = balanceRef.current + targetBet.amount;
@@ -347,20 +353,18 @@ export default function App() {
       return;
     }
 
-    if (!targetBet.isActive || status !== 'FLYING' || !targetBet.currentId) return;
+    // Capture multiplier from Ref at the exact microsecond of click
+    const clickMultiplier = multiplierRef.current;
+
+    if (!targetBet.isActive || status !== 'FLYING' || !targetBet.currentId || clickMultiplier <= 1.0) return;
     
-    // Capture values at click time from Ref for absolute zero-latency
-    const currentMultiplier = multiplierRef.current;
-    const currentBetAmount = targetBet.amount;
-    const currentBetId = targetBet.currentId;
+    const betAmount = targetBet.amount;
+    const betId = targetBet.currentId;
 
-    // Remove artificial floor for instant feedback
-    if (currentMultiplier < 1.0) return; 
-
-    const winAmount = Number((currentMultiplier * currentBetAmount).toFixed(2));
+    const winAmount = Number((clickMultiplier * betAmount).toFixed(2));
     const newBalance = balanceRef.current + winAmount;
     
-    // Immediate UI feedback
+    // 1. INSTANT STATE UPDATES
     setBalance(newBalance);
     balanceRef.current = newBalance;
     audioRefs.current.cashout.play().catch(() => {});
@@ -373,25 +377,24 @@ export default function App() {
       bet2IdRef.current = null;
     }
 
-    setLastWin({ amount: winAmount, multiplier: currentMultiplier });
+    setLastWin({ amount: winAmount, multiplier: clickMultiplier });
     setTimeout(() => setLastWin(null), 3000);
 
+    // 2. BACKGROUND SERVER SYNC
     try {
-      // Update bet first
-      await updateDoc(doc(db, 'bets', currentBetId), {
-        status: 'cashed-out',
-        multiplier: currentMultiplier,
+      await updateDoc(doc(db, 'bets', betId), {
+        status: 'WON',
+        multiplier: clickMultiplier,
         winAmount: winAmount,
-        profit: winAmount - currentBetAmount
+        cashedOutAt: serverTimestamp()
       });
 
-      // Then update user balance
       const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, { balance: newBalance });
+      await updateDoc(userRef, { balance: increment(winAmount) });
     } catch (err) {
-      console.error('Error capping out:', err);
+      console.error('Critical Cashout Sync Error:', err);
     }
-  }, [user, bet1, bet2, status]);
+  }, [user, status]);
 
   const startTimeRef = useRef<number>(Date.now());
   
